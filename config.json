@@ -2,8 +2,10 @@
 	"exchange": "bingx",
 	"symbols": ["BTCUSDT", "ETHUSDT"],
 	"intervals": ["1h", "15m"],
-	"history_limit": "10",
-	"send_messages": false,
+	"fractal_window": 5,
+	"history_limit": 100,
+	"test_mode": true,
+	"send_messages": true,
 	"logging": {
 		"level": "DEBUG"
 	},

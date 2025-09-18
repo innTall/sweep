@@ -67,3 +67,37 @@ def get_last_confirmed_candle(symbol: str, interval: str, interval_map: dict) ->
         "low": l,
         "close": cl,
     }
+
+def get_candles(symbol: str, interval: str, limit: int, interval_map: dict) -> list[dict[str, Any]]:
+    """Fetch candles with unified structure (using close times)."""
+    params = {"symbol": _normalize_symbol(symbol), "interval": interval, "limit": limit}
+    response = requests.get(APIURL, params=params)
+    response.raise_for_status()
+    data = response.json()
+
+    if isinstance(data, dict):
+        candles = data.get("data", [])
+    elif isinstance(data, list):
+        candles = data
+    else:
+        raise ValueError("Unexpected response format")
+
+    results = []
+    for c in candles:
+        if isinstance(c, dict):
+            open_ts = c.get("time") or c.get("openTime")
+            if open_ts is None:
+                continue
+            close_ts = int(open_ts) + interval_map[interval] * 1000
+            o, h, l, cl = float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])
+        else:  # list format
+            open_ts = int(c[0])
+            close_ts = open_ts + interval_map[interval] * 1000
+            o, h, l, cl = float(c[1]), float(c[2]), float(c[3]), float(c[4])
+
+        results.append({
+            "close_time": close_ts,
+            "open": o, "high": h, "low": l, "close": cl,
+        })
+
+    return results
