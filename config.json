@@ -1,8 +1,8 @@
 {
 	"exchange": "bingx",
 	"symbols": ["BTCUSDT", "ETHUSDT"],
-	"intervals": ["1h", "15m"],
-	"fractal_window": 5,
+	"intervals": ["5m", "15m"],
+	"fractal_window": 3,
 	"history_limit": 100,
 	"test_mode": true,
 	"send_messages": true,
