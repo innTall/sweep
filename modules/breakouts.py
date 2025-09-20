@@ -1,13 +1,9 @@
 # modules/breakouts.py
-import pytz
 from datetime import datetime
-import utils.bingx_api as bingx_api
-
 
 def _format_ts(ts_ms: int, tz) -> str:
     """Format timestamp (ms) into human-readable string."""
     return datetime.fromtimestamp(ts_ms / 1000, tz=tz).strftime("%Y-%m-%d %H:%M")
-
 
 def check_breakouts(symbol, interval, H_fractals, L_fractals, candle, tz, interval_map):
     """

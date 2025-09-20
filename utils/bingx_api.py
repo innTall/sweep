@@ -48,11 +48,11 @@ def get_last_confirmed_candle(symbol: str, interval: str, interval_map: dict) ->
         open_ts = c.get("time") or c.get("openTime")
         if open_ts is None:
             raise ValueError("Candle missing time field")
-        o, h, l, cl = float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])
+        o, h, low, cl = float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])
         Last_Close_Price = cl
     else:  # list format
         open_ts = c[0]
-        o, h, l, cl = float(c[1]), float(c[2]), float(c[3]), float(c[4])
+        o, h, low, cl = float(c[1]), float(c[2]), float(c[3]), float(c[4])
         Last_Close_Price = cl
 
     # Compute close time: open time + interval
@@ -64,7 +64,7 @@ def get_last_confirmed_candle(symbol: str, interval: str, interval_map: dict) ->
         "timestamp": Last_Close_Time,
         "open": o,
         "high": h,
-        "low": l,
+        "low": low,
         "close": cl,
     }
 
@@ -89,15 +89,15 @@ def get_candles(symbol: str, interval: str, limit: int, interval_map: dict) -> l
             if open_ts is None:
                 continue
             close_ts = int(open_ts) + interval_map[interval] * 1000
-            o, h, l, cl = float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])
+            o, h, low, cl = float(c["open"]), float(c["high"]), float(c["low"]), float(c["close"])
         else:  # list format
             open_ts = int(c[0])
             close_ts = open_ts + interval_map[interval] * 1000
-            o, h, l, cl = float(c[1]), float(c[2]), float(c[3]), float(c[4])
+            o, h, low, cl = float(c[1]), float(c[2]), float(c[3]), float(c[4])
 
         results.append({
             "close_time": close_ts,
-            "open": o, "high": h, "low": l, "close": cl,
+            "open": o, "high": h, "low": low, "close": cl,
         })
 
     return results

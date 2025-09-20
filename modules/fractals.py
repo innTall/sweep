@@ -1,6 +1,5 @@
 # modules/fractals.py
 import logging
-from datetime import datetime
 import utils.bingx_api as bingx_api
 
 logger = logging.getLogger("sweep")
