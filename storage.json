@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "last_full_scan": null,
+    "last_update_time": "2025-09-21T19:11:03.204504Z",
+    "last_candle_close_time": 1758474600000
+  },
+  "ETHUSDT": {
+    "5m": {
+      "H": [
+        {
+          "type": "HFractal",
+          "time": 1758472500000,
+          "high": 4484.24
+        },
+        {
+          "type": "HFractal",
+          "time": 1758471300000,
+          "high": 4487.41
+        },
+        {
+          "type": "HFractal",
+          "time": 1758437100000,
+          "high": 4490.96
+        }
+      ],
+      "L": [
+        {
+          "type": "LFractal",
+          "time": 1758459000000,
+          "low": 4459.61
+        },
+        {
+          "type": "LFractal",
+          "time": 1758456300000,
+          "low": 4458.36
+        },
+        {
+          "type": "LFractal",
+          "time": 1758455700000,
+          "low": 4457.57
+        },
+        {
+          "type": "LFractal",
+          "time": 1758452700000,
+          "low": 4453.89
+        },
+        {
+          "type": "LFractal",
+          "time": 1758447300000,
+          "low": 4442.0
+        }
+      ]
+    }
+  }
+}

@@ -70,9 +70,9 @@ def format_breakout_message(breakout: dict, tz) -> str:
 
     # Choose icon + label based on type
     if breakout["type"] in ("HSweep", "HConfirm"):
-        icon = "🟩"
+        icon = "⬆️"
     else:
-        icon = "🟥"
+        icon = "⬇️"
 
     # Distance in candles between fractal and breakout
     distance = breakout.get("distance", "?")
