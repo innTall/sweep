@@ -67,7 +67,7 @@ def run_fractal_detection(config, tz, logger, storage):
                 # 4) Check breakouts
                 breakout = check_breakouts(symbol, interval, H_fractals, L_fractals, last_candle, tz, interval_map)
                 if breakout:
-                    message = format_breakout_message(breakout, tz)
+                    message = format_breakout_message(breakout, tz, H_fractals, L_fractals)
                     logger.info(f"Breakout detected: {message}")
                     if send_messages:
                         send_signal(message)
@@ -142,4 +142,18 @@ def main():
 
     # Save step not needed here anymore (already done per symbol/interval)
     logger.info("Cycle finished.")
+'''
+
+'''
+# 4) Check breakouts
+                breakout = check_breakouts(symbol, interval, H_fractals, L_fractals, last_candle, tz, interval_map)
+                if breakout:
+                    message = format_breakout_message(breakout, tz, H_fractals, L_fractals)
+                    logger.info(f"Breakout detected: {message}")
+                    if send_messages:
+                        send_signal(message)
+                    else:
+                        logger.info("Message sending disabled (send_messages=false)")
+                else:
+                    logger.info(f"No breakout for {symbol}-{interval}")
 '''

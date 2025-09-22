@@ -65,7 +65,38 @@ def check_breakouts(symbol, interval, H_fractals, L_fractals, candle, tz, interv
 
     return breakout
 
-def format_breakout_message(breakout: dict, tz) -> str:
+def format_breakout_message(breakout, tz, H_fractals=None, L_fractals=None):
+    """
+    Format the Telegram breakout message in a consistent way.
+    """
+    icon = "⬆️" if breakout["type"].startswith("H") else "⬇️"
+    distance = breakout.get("distance", "?")
+
+    # Format fractal and candle time
+    ftime = datetime.fromtimestamp(int(breakout["fractal_time"]) / 1000, tz=tz)
+    ftime_str = ftime.strftime("%d%b %H:%M")
+
+    # Core message (works for both H and L)
+    msg_lines = [
+        f"{icon} {breakout['type']} ({distance})",
+        f"Symbol: {breakout['symbol']}, {breakout['interval']}",
+    ]
+
+    if breakout["type"].startswith("H"):
+        msg_lines.append(f"HFractal High={breakout['fractal_value']} | {ftime_str}")
+        msg_lines.append(f"BreakCandle High={breakout['candle_high']}")
+    else:
+        msg_lines.append(f"LFractal Low={breakout['fractal_value']} | {ftime_str}")
+        msg_lines.append(f"BreakCandle Low={breakout['candle_low']}")
+
+    # Add active fractals count if provided
+    if H_fractals is not None and L_fractals is not None:
+        msg_lines.append(f"Active fractals: H={len(H_fractals)} L={len(L_fractals)}")
+
+    return "\n".join(msg_lines)
+
+'''
+def format_breakout_message(breakout: dict, tz, H_fractals=None, L_fractals=None) -> str:
     """Format breakout signal for Telegram."""
 
     # Choose icon + label based on type
@@ -97,4 +128,8 @@ def format_breakout_message(breakout: dict, tz) -> str:
             f"BreakCandle Low={breakout['candle_low']}"
         )
 
+    if H_fractals is not None and L_fractals is not None:
+        msg += f"\nActive fractals: H={len(H_fractals)} L={len(L_fractals)}\n"
+    
     return msg
+'''

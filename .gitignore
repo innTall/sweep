@@ -10,9 +10,12 @@ venv/
 
 # Secrets
 .env
-.venv
 
 # OS files
 .DS_Store
 Thumbs.db
-draft
+
+# Project-specific
+draft/
+logs/*.log
+storage.json

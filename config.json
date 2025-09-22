@@ -1,6 +1,6 @@
 {
 	"exchange": "bingx",
-	"symbols": ["ETHUSDT"],
+	"symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
 	"intervals": ["5m"],
 	"fractal_window": 3,
 	"history_limit": 100,
@@ -10,6 +10,9 @@
 		"level": "DEBUG"
 	},
 	"timezone": "Europe/Madrid",
+	"runner_interval_minutes": 5,
+	"runner_delay_seconds": 60,
+	"runner_log_cleanup_minutes": 60,
 	"interval_map": {
 		"1m": 60,
 		"5m": 300,
