@@ -8,7 +8,7 @@ import utils.bingx_api as bingx_api
 from core.telegram_bot import send_signal
 from modules.fractals import detect_fractals, get_candles
 from modules.breakouts import check_breakouts, format_breakout_message
-from core.fractal_storage import load_storage, save_storage, update_storage
+from core.fractal_storage import load_storage, save_storage, update_storage, handle_htf_match
 
 
 def setup_logger(config: dict):
@@ -25,9 +25,10 @@ def run_fractal_detection(config, tz, logger, storage):
     history_limit = int(config["history_limit"])
     fractal_window = int(config["fractal_window"])
     send_messages = config["send_messages"]
+    base_interval = config["base_interval"]
 
     for symbol in config["symbols"]:
-        for interval in config["intervals"]:
+        for interval in config["intervals"]:  # base intervals, e.g. ["15m"]
             try:
                 # 1) Get the last confirmed (closed) candle used for breakout checking
                 last_candle = bingx_api.get_last_confirmed_candle(symbol, interval, interval_map)
@@ -51,7 +52,7 @@ def run_fractal_detection(config, tz, logger, storage):
                     logger.info(f"Not enough history (before last close) for {symbol}-{interval} (need {fractal_window})")
                     continue
 
-                # 3) Detect active fractals
+                # 3) Detect active fractals (base interval only)
                 H_fractals, L_fractals = detect_fractals(candles_before_last, fractal_window)
 
                 logger.info(f"\n{symbol}-{interval} Active HFractals: {len(H_fractals)}")
@@ -64,10 +65,22 @@ def run_fractal_detection(config, tz, logger, storage):
                     ts = datetime.fromtimestamp(int(f["time"]) / 1000, tz=tz)
                     logger.info(f"  L @ {ts.strftime('%Y-%m-%d %H:%M %Z')} | low={f['low']}")
 
-                # 4) Check breakouts
+                # 4) Check breakouts (only on base interval)
                 breakout = check_breakouts(symbol, interval, H_fractals, L_fractals, last_candle, tz, interval_map)
                 if breakout:
-                    message = format_breakout_message(breakout, tz, H_fractals, L_fractals)
+                    from core.fractal_storage import handle_htf_match
+                    storage, matched_htfs = handle_htf_match(storage, symbol, breakout, config["higher_intervals"])
+
+                    message = format_breakout_message(
+                        breakout,
+                        tz,
+                        H_fractals=H_fractals,
+                        L_fractals=L_fractals,
+                        storage=storage,
+                        higher_intervals=config["higher_intervals"],
+                        matched_htfs=matched_htfs,
+                    )
+
                     logger.info(f"Breakout detected: {message}")
                     if send_messages:
                         send_signal(message)
@@ -76,8 +89,17 @@ def run_fractal_detection(config, tz, logger, storage):
                 else:
                     logger.info(f"No breakout for {symbol}-{interval}")
 
-                # 5) Update storage at the very end
-                storage = update_storage(storage, symbol, interval, candles_before_last, fractal_window)
+                # 5) Update storage for base + higher intervals
+                all_intervals = [interval] + config["higher_intervals"]
+                for iv in all_intervals:
+                    candles_iv = get_candles(symbol, iv, history_limit, interval_map)
+
+                    candles_iv.sort(key=_close_time)
+                    candles_before_last_iv = [c for c in candles_iv if _close_time(c) < int(last_candle["timestamp"])]
+
+                    storage = update_storage(storage, symbol, iv, candles_before_last_iv, fractal_window)
+
+                # Save storage once after all intervals updated
                 save_storage(storage, last_candle=last_candle)
                 logger.info(
                     f"Storage updated and saved at {storage['metadata']['last_update_time']} "
@@ -125,30 +147,60 @@ if __name__ == "__main__":
 # python -m main
 
 '''
-def main():
-    with open("config.json") as f:
-        config = json.load(f)
+for symbol in config["symbols"]:
+        for interval in config["intervals"]:  # base intervals, e.g. ["15m"]
+            try:
+                # 1) Get the last confirmed (closed) candle used for breakout checking
+                last_candle = bingx_api.get_last_confirmed_candle(symbol, interval, interval_map)
+                logger.debug(
+                    f"{symbol}-{interval} last_closed: ts={last_candle['timestamp']} close={last_candle['close']}"
+                )
 
-    tz = pytz.timezone(config.get("timezone", "UTC"))
-    logger = setup_logger(config)
-    
-    logger.info("Starting bot (Stage 2: fractals & breakouts)...")
+                # 2) Get history candles
+                candles = get_candles(symbol, interval, history_limit, interval_map)
 
-    # Load storage at start
-    storage = load_storage()
+                def _close_time(c):
+                    return int(c.get("close_time") or c.get("timestamp"))
 
-    # Run detection and update storage
-    storage = run_fractal_detection(config, tz, logger, storage)
+                candles.sort(key=_close_time)
+                candles_before_last = [c for c in candles if _close_time(c) < int(last_candle["timestamp"])]
+                logger.debug(
+                    f"{symbol}-{interval} fetched={len(candles)} before_last={len(candles_before_last)}"
+                )
 
-    # Save step not needed here anymore (already done per symbol/interval)
-    logger.info("Cycle finished.")
-'''
+                if len(candles_before_last) < fractal_window:
+                    logger.info(f"Not enough history (before last close) for {symbol}-{interval} (need {fractal_window})")
+                    continue
 
-'''
-# 4) Check breakouts
+                # 3) Detect active fractals (base interval only)
+                H_fractals, L_fractals = detect_fractals(candles_before_last, fractal_window)
+
+                logger.info(f"\n{symbol}-{interval} Active HFractals: {len(H_fractals)}")
+                for f in H_fractals:
+                    ts = datetime.fromtimestamp(int(f["time"]) / 1000, tz=tz)
+                    logger.info(f"  H @ {ts.strftime('%Y-%m-%d %H:%M %Z')} | high={f['high']}")
+
+                logger.info(f"{symbol}-{interval} Active LFractals: {len(L_fractals)}")
+                for f in L_fractals:
+                    ts = datetime.fromtimestamp(int(f["time"]) / 1000, tz=tz)
+                    logger.info(f"  L @ {ts.strftime('%Y-%m-%d %H:%M %Z')} | low={f['low']}")
+
+                # 4) Check breakouts (only on base interval)
                 breakout = check_breakouts(symbol, interval, H_fractals, L_fractals, last_candle, tz, interval_map)
                 if breakout:
-                    message = format_breakout_message(breakout, tz, H_fractals, L_fractals)
+                    from core.fractal_storage import handle_htf_match
+                    storage, matched_htfs = handle_htf_match(storage, symbol, breakout, config["higher_intervals"])
+
+                    message = format_breakout_message(
+                        breakout,
+                        tz,
+                        H_fractals=H_fractals,
+                        L_fractals=L_fractals,
+                        storage=storage,
+                        higher_intervals=config["higher_intervals"],
+                        matched_htfs=matched_htfs,
+                    )
+
                     logger.info(f"Breakout detected: {message}")
                     if send_messages:
                         send_signal(message)
@@ -156,4 +208,26 @@ def main():
                         logger.info("Message sending disabled (send_messages=false)")
                 else:
                     logger.info(f"No breakout for {symbol}-{interval}")
+
+                # 5) Update storage for base + higher intervals
+                all_intervals = [interval] + config["higher_intervals"]
+                for iv in all_intervals:
+                    candles_iv = get_candles(symbol, iv, history_limit, interval_map)
+
+                    candles_iv.sort(key=_close_time)
+                    candles_before_last_iv = [c for c in candles_iv if _close_time(c) < int(last_candle["timestamp"])]
+
+                    storage = update_storage(storage, symbol, iv, candles_before_last_iv, fractal_window)
+
+                # Save storage once after all intervals updated
+                save_storage(storage, last_candle=last_candle)
+                logger.info(
+                    f"Storage updated and saved at {storage['metadata']['last_update_time']} "
+                    f"(candle close {storage['metadata'].get('last_candle_close_time')})"
+                )
+
+            except Exception as e:
+                logger.error(f"Fractal detection failed for {symbol}-{interval}: {e}")
+
+    return storage
 '''

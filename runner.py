@@ -120,7 +120,7 @@ if __name__ == "__main__":
     interval_minutes = config["runner_interval_minutes"]
     delay_seconds = config["runner_delay_seconds"]
 
-    print(f"[runner] Starting runner loop (5m interval, +60s delay), "
+    print(f"[runner] Starting runner loop (15m interval, +60s delay), "
           f"timezone={tz}, cleanup_interval={CLEAN_INTERVAL}")
     runner_loop(tz)
 
