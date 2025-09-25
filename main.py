@@ -34,7 +34,7 @@ def run_fractal_detection(config, tz, logger, storage):
                 c["close_time"] = c["timestamp"]
         return candles
 
-    for symbol in config["symbols"]:
+    for symbol in config["top_symbols"]:
         for interval in [base_interval]:  # base interval only, e.g. "15m"
             try:
                 # 1) Get the last confirmed (closed) candle used for breakout checking
@@ -128,7 +128,7 @@ def ensure_storage(config, tz, logger):
     meta = storage.get("metadata", {})
 
     # 🔑 prune symbols not in config
-    current_symbols = set(config["symbols"])
+    current_symbols = set(config["top_symbols"])
     stored_symbols = set(storage.keys()) - {"metadata"}
     removed = stored_symbols - current_symbols
     if removed:
@@ -180,7 +180,7 @@ def ensure_storage(config, tz, logger):
 
     if force_full:
         storage = init_full_scan(
-            config["symbols"],
+            config["top_symbols"],
             base_interval,
             higher_intervals,
             fractal_window,
@@ -206,12 +206,9 @@ def main():
 
     logger.info("Starting bot (Stage 2: fractals & breakouts)...")
 
-    # 🔑 Ensure storage is ready
+    # 2) Ensure storage is ready
     storage = ensure_storage(config, tz, logger)
     
-    # 2) Load storage at start
-    # storage = load_storage()
-
     # 3) Run detection and update storage
     storage = run_fractal_detection(config, tz, logger, storage)
 

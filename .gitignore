@@ -19,3 +19,4 @@ Thumbs.db
 draft/
 logs/*.log
 storage.json
+symbols.json

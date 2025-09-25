@@ -1,31 +1,49 @@
 {
-	"exchange": "bingx",
-	"symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-	"base_interval": "15m",
-	"higher_intervals": ["1h", "4h"],
-	"fractal_window": 5,
-	"history_limit": 100,
-	"add_symbols": 10,
-	"test_mode": true,
-	"send_messages": true,
-	"logging": {
-		"level": "DEBUG"
-	},
-	"timezone": "Europe/Madrid",
-	"runner_interval_minutes": 15,
-	"runner_delay_seconds": 60,
-	"runner_log_cleanup_minutes": 60,
-	"force_rescan_on_start": true,
-	"interval_map": {
-		"1m": 60,
-		"5m": 300,
-		"15m": 900,
-		"30m": 1800,
-		"1h": 3600,
-		"2h": 7200,
-		"4h": 14400,
-		"6h": 21600,
-		"12h": 43200,
-		"1d": 86400
-	}
+  "exchange": "bingx",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT"
+  ],
+  "top_symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "LINKUSDT",
+    "BCHUSDT",
+    "ADAUSDT",
+    "XRPUSDT",
+    "LTCUSDT",
+    "DOTUSDT",
+    "AVAXUSDT"
+  ],
+  "base_interval": "15m",
+  "higher_intervals": [
+    "1h",
+    "4h"
+  ],
+  "fractal_window": 5,
+  "history_limit": 50,
+  "add_symbols": 10,
+  "test_mode": true,
+  "send_messages": true,
+  "logging": {
+    "level": "DEBUG"
+  },
+  "timezone": "Europe/Madrid",
+  "runner_interval_minutes": 15,
+  "runner_delay_seconds": 60,
+  "runner_log_cleanup_minutes": 60,
+  "force_rescan_on_start": true,
+  "interval_map": {
+    "1m": 60,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "2h": 7200,
+    "4h": 14400,
+    "6h": 21600,
+    "12h": 43200,
+    "1d": 86400
+  }
 }
