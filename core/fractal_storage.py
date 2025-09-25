@@ -2,7 +2,7 @@
 import json
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from modules.fractals import detect_fractals
 
@@ -17,42 +17,66 @@ def load_storage(path: str = "storage.json") -> dict:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load storage from {path}: {e}")
-    return {"metadata": {"last_full_scan": None}}
+    # Always return with metadata keys present
+    return {
+        "metadata": {
+            "last_full_scan": None,
+            "last_update_time": None,
+            "last_candle_close_time": None,
+        }
+    }
 
 
 def save_storage(storage: dict, path: str = "storage.json", last_candle: dict | None = None):
-    """Save fractal storage to file."""
+    """Save fractal storage to file with tz-aware ISO8601 timestamps."""
     try:
-        # Add test-only metadata field
         storage.setdefault("metadata", {})
-        storage["metadata"]["last_update_time"] = datetime.now().isoformat() + "Z"
-        
+        now = datetime.now(timezone.utc).isoformat()  # ✅ tz-aware
+        storage["metadata"]["last_update_time"] = now
+
         if last_candle is not None:
             storage["metadata"]["last_candle_close_time"] = int(last_candle["timestamp"])
 
         with open(path, "w") as f:
             json.dump(storage, f, indent=2)
-        
+
         logger.info(
-            f"Storage saved to {path} at {storage['metadata']['last_update_time']}"
+            f"Storage saved to {path} at {storage['metadata']['last_update_time']} "
             f"(candle close {storage['metadata'].get('last_candle_close_time')})"
         )
 
     except Exception as e:
         logger.error(f"Failed to save storage to {path}: {e}")
 
-def init_full_scan(symbols, intervals, fractal_window, history_limit, interval_map, tz, get_candles_fn) -> dict:
+
+def normalize_candles(candles: list[dict]) -> list[dict]:
+    """Ensure every candle has a close_time key for consistency."""
+    for c in candles:
+        if "close_time" not in c and "timestamp" in c:
+            c["close_time"] = c["timestamp"]
+    return candles
+
+
+def init_full_scan(
+    symbols, base_interval, higher_intervals,
+    fractal_window, history_limit, interval_map,
+    tz, get_candles_fn
+) -> dict:
     """
     Run full market scan, detect all active fractals, return storage dict.
     get_candles_fn: function(symbol, interval, limit, interval_map)
     """
     storage = {}
+    all_intervals = [base_interval] + list(higher_intervals)
 
     for symbol in symbols:
         storage[symbol] = {}
-        for interval in intervals:
+        for interval in all_intervals:
             try:
-                candles = get_candles_fn(symbol, interval, history_limit, interval_map)
+                candles = normalize_candles(
+                    get_candles_fn(symbol, interval, history_limit, interval_map)
+                )
+                candles.sort(key=lambda c: int(c["close_time"]))  # ✅ safe
                 H_fractals, L_fractals = detect_fractals(candles, fractal_window)
 
                 storage[symbol][interval] = {
@@ -66,9 +90,13 @@ def init_full_scan(symbols, intervals, fractal_window, history_limit, interval_m
             except Exception as e:
                 logger.error(f"Full scan failed for {symbol}-{interval}: {e}")
 
-    storage["metadata"] = {"last_full_scan": datetime.utcnow().isoformat() + "Z"}
+    now = datetime.now(timezone.utc).isoformat()  # ✅ tz-aware
+    storage["metadata"] = {
+        "last_full_scan": now,
+        "last_update_time": now,
+        "last_candle_close_time": None,
+    }
     return storage
-
 
 def update_storage(storage: dict, symbol: str, interval: str, candles: list, fractal_window: int) -> dict:
     """

@@ -1,11 +1,11 @@
 {
 	"exchange": "bingx",
 	"symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
-	"intervals": ["15m"],
 	"base_interval": "15m",
 	"higher_intervals": ["1h", "4h"],
 	"fractal_window": 5,
 	"history_limit": 100,
+	"add_symbols": 10,
 	"test_mode": true,
 	"send_messages": true,
 	"logging": {
