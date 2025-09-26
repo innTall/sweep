@@ -1,6 +1,6 @@
 # modules/fractals.py
 import logging
-import utils.bingx_api as bingx_api
+from utils.bingx_api_async import BingxApiAsync
 
 logger = logging.getLogger("sweep")
 
@@ -32,6 +32,6 @@ def detect_fractals(candles: list[dict], fractal_window: int):
 
     return active_H, active_L
 
-def get_candles(symbol: str, interval: str, limit: int, interval_map: dict):
-    """Wrapper around bingx_api.get_candles (for modular import)."""
-    return bingx_api.get_candles(symbol, interval, limit, interval_map)
+async def get_fractal_candles(symbol: str, interval: str, limit: int, interval_map: dict):
+    async with BingxApiAsync() as bingx_api:
+        return await bingx_api.get_candles(symbol, interval, limit, interval_map)

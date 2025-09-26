@@ -16,7 +16,7 @@ venv/
 Thumbs.db
 
 # Project-specific
-draft/
+archive/
 logs/*.log
 storage.json
 symbols.json

@@ -3,6 +3,7 @@ import os
 import time
 import json
 import logging
+import asyncio
 from datetime import datetime, timedelta, timezone
 import pytz
 import main
@@ -55,25 +56,25 @@ def clean_log_if_needed(logger):
         _last_cleanup = now
 
 
-def runner_loop(tz):
-    """Run main.main() at strict schedule."""
+async def runner_loop(config, tz, interval_minutes, delay_seconds):
     logger = setup_runner_logger()
     global _error_detected
+
+    storage = main.load_storage()  # pre-load storage once
 
     while True:
         next_run = get_next_run_time(tz, interval_minutes=interval_minutes, delay_seconds=delay_seconds)
         now = datetime.now(tz)
-
         wait_seconds = (next_run - now).total_seconds()
+
         if wait_seconds > 0:
             logger.info(f"Next run scheduled at {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')} "
                         f"(waiting {int(wait_seconds)}s)")
-            time.sleep(wait_seconds)
+            await asyncio.sleep(wait_seconds)
 
-        # Run main.py once (fractal detection + breakouts + storage update)
         logger.info(f"Running main.main() at {datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S %Z')}")
         try:
-            main.main()
+            storage = await main.main(config, tz, logger, storage)
         except Exception as e:
             logger.exception(f"[runner] Error while running main: {e}")
             _error_detected = True
@@ -82,7 +83,6 @@ def runner_loop(tz):
             except Exception as te:
                 logger.error(f"Failed to send Telegram alert: {te}")
 
-        # cleanup step
         clean_log_if_needed(logger)
 
 
@@ -107,21 +107,18 @@ def setup_runner_logger():
 
 
 if __name__ == "__main__":
-    # Load timezone and cleanup interval from config.json
-    import json
     with open("config.json") as f:
         config = json.load(f)
 
     tz = pytz.timezone(config.get("timezone", "UTC"))
-
     cleanup_minutes = config["runner_log_cleanup_minutes"]
     CLEAN_INTERVAL = timedelta(minutes=cleanup_minutes)
-
     interval_minutes = config["runner_interval_minutes"]
     delay_seconds = config["runner_delay_seconds"]
 
-    print(f"[runner] Starting runner loop (15m interval, +60s delay), "
+    print(f"[runner] Starting runner loop ({interval_minutes}m interval, +{delay_seconds}s delay), "
           f"timezone={tz}, cleanup_interval={CLEAN_INTERVAL}")
-    runner_loop(tz)
+
+    asyncio.run(runner_loop(config, tz, interval_minutes, delay_seconds))
 
 # python runner.py

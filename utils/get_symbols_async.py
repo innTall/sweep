@@ -1,18 +1,16 @@
-# utils/get_symbols.py
+# utils/get_symbols_async.py
 import argparse
 import json
 import logging
 import sys
 from pathlib import Path
+import aiohttp
+import asyncio
 
-import requests
-
-# Constants
 CONTRACTS_URL = "https://open-api.bingx.com/openApi/swap/v2/quote/contracts"
 SYMBOLS_FILE = Path("symbols.json")
 CONFIG_FILE = Path("config.json")
 
-# Logger setup
 logger = logging.getLogger("get_symbols")
 handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
@@ -21,12 +19,13 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-def get_all_usdtm_symbols() -> list[str]:
+async def get_all_usdtm_symbols() -> list[str]:
     """Fetch all active BingX USDT-M perpetual futures symbols (normalized)."""
     try:
-        resp = requests.get(CONTRACTS_URL, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.get(CONTRACTS_URL) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
     except Exception as e:
         logger.error(f"Failed to fetch contracts from BingX: {e}")
         return []
@@ -37,7 +36,6 @@ def get_all_usdtm_symbols() -> list[str]:
 
     contracts = data["data"]
     logger.info(f"Fetched {len(contracts)} contracts from BingX")
-    logger.debug(f"Sample contracts: {contracts[:3]}")
 
     symbols: list[str] = []
     for item in contracts:
@@ -95,14 +93,14 @@ def update_top_symbols(add_symbols: int):
         logger.error(f"Failed to write config.json: {e}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Fetch and manage BingX USDT-M symbols")
+async def main():
+    parser = argparse.ArgumentParser(description="Fetch and manage BingX USDT-M symbols (async)")
     parser.add_argument("--force", action="store_true", help="Overwrite symbols.json")
     parser.add_argument("--limit", type=int, default=None, help="Fetch only N symbols (test)")
     parser.add_argument("--update-top", action="store_true", help="Update top_symbols from symbols.json")
     args = parser.parse_args()
 
-    symbols = get_all_usdtm_symbols()
+    symbols = await get_all_usdtm_symbols()
     if not symbols:
         logger.error("No symbols retrieved. Aborting.")
         return
@@ -125,4 +123,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

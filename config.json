@@ -1,10 +1,5 @@
 {
   "exchange": "bingx",
-  "symbols": [
-    "BTCUSDT",
-    "ETHUSDT",
-    "SOLUSDT"
-  ],
   "top_symbols": [
     "BTCUSDT",
     "ETHUSDT",
@@ -14,15 +9,16 @@
     "XRPUSDT",
     "LTCUSDT",
     "DOTUSDT",
-    "AVAXUSDT"
+    "AVAXUSDT",
+    "THETAUSDT"
   ],
   "base_interval": "15m",
   "higher_intervals": [
     "1h",
     "4h"
   ],
-  "fractal_window": 5,
-  "history_limit": 50,
+  "fractal_window": 7,
+  "history_limit": 100,
   "add_symbols": 10,
   "test_mode": true,
   "send_messages": true,
