@@ -1,4 +1,3 @@
-# utils/get_symbols_async.py
 import argparse
 import json
 import logging
@@ -9,6 +8,7 @@ import asyncio
 
 CONTRACTS_URL = "https://open-api.bingx.com/openApi/swap/v2/quote/contracts"
 SYMBOLS_FILE = Path("symbols.json")
+COINS_FILE = Path("coins.txt")
 CONFIG_FILE = Path("config.json")
 
 logger = logging.getLogger("get_symbols")
@@ -49,28 +49,36 @@ async def get_all_usdtm_symbols() -> list[str]:
     return symbols
 
 
-def save_symbols(symbols: list[str], path: Path, force: bool = False):
-    """Save symbols.json safely."""
-    if path.exists() and not force:
-        logger.warning(f"{path} already exists. Use --force to overwrite.")
-        return
+def save_symbols(symbols: list[str], force: bool = False):
+    """Save symbols.json and coins.txt safely."""
+    # --- Save JSON ---
+    if SYMBOLS_FILE.exists() and not force:
+        logger.warning(f"{SYMBOLS_FILE} already exists. Use --force to overwrite.")
+    else:
+        try:
+            SYMBOLS_FILE.write_text(json.dumps(symbols, indent=2), encoding="utf-8")
+            logger.info(f"Saved {len(symbols)} symbols to {SYMBOLS_FILE}")
+        except Exception as e:
+            logger.error(f"Failed to save {SYMBOLS_FILE}: {e}")
+
+    # --- Save TXT (alphabetical, no USDT) ---
+    coins = sorted(sym.replace("USDT", "") for sym in symbols)
     try:
-        path.write_text(json.dumps(symbols, indent=2), encoding="utf-8")
-        logger.info(f"Saved {len(symbols)} symbols to {path}")
+        with COINS_FILE.open("w", encoding="utf-8") as f:
+            f.write("# List of coins (alphabetical, without USDT)\n")
+            f.write("# You can add/remove/edit coins manually; comments allowed with '#'\n")
+            f.write("# Example: keep only coins you want to prioritize\n\n")
+            for coin in coins:
+                f.write(f"{coin}\n")
+        logger.info(f"Saved {len(coins)} coins to {COINS_FILE}")
     except Exception as e:
-        logger.error(f"Failed to save {path}: {e}")
+        logger.error(f"Failed to save {COINS_FILE}: {e}")
 
 
-def update_top_symbols(add_symbols: int):
-    """Update top_symbols in config.json based on add_symbols and symbols.json."""
-    if not SYMBOLS_FILE.exists():
-        logger.error(f"{SYMBOLS_FILE} not found. Run fetcher first.")
-        return
-
-    try:
-        all_symbols = json.loads(SYMBOLS_FILE.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.error(f"Failed to read {SYMBOLS_FILE}: {e}")
+def update_config_top_symbols(symbols: list[str], force: bool = False):
+    """Update config.json → top_symbols with the full list (alphabetical)."""
+    if not CONFIG_FILE.exists():
+        logger.error(f"{CONFIG_FILE} not found. Skipping top_symbols update.")
         return
 
     try:
@@ -79,25 +87,20 @@ def update_top_symbols(add_symbols: int):
         logger.error(f"Failed to read {CONFIG_FILE}: {e}")
         return
 
-    n = max(0, add_symbols)
-    top_symbols = all_symbols[:n]
-    if not top_symbols:
-        logger.warning("No symbols selected for top_symbols. Skipping update.")
-        return
+    sorted_symbols = sorted(symbols)
+    config["top_symbols"] = sorted_symbols
 
-    config["top_symbols"] = top_symbols
     try:
         CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        logger.info(f"Updated config.json with top {len(top_symbols)} symbols")
+        logger.info(f"Updated config.json with {len(sorted_symbols)} top_symbols (alphabetical)")
     except Exception as e:
-        logger.error(f"Failed to write config.json: {e}")
+        logger.error(f"Failed to write {CONFIG_FILE}: {e}")
 
 
 async def main():
     parser = argparse.ArgumentParser(description="Fetch and manage BingX USDT-M symbols (async)")
-    parser.add_argument("--force", action="store_true", help="Overwrite symbols.json")
+    parser.add_argument("--force", action="store_true", help="Overwrite symbols.json & coins.txt and reset top_symbols")
     parser.add_argument("--limit", type=int, default=None, help="Fetch only N symbols (test)")
-    parser.add_argument("--update-top", action="store_true", help="Update top_symbols from symbols.json")
     args = parser.parse_args()
 
     symbols = await get_all_usdtm_symbols()
@@ -109,17 +112,11 @@ async def main():
         symbols = symbols[: args.limit]
         logger.info(f"Using top {len(symbols)} symbols (test mode)")
 
-    save_symbols(symbols, SYMBOLS_FILE, force=args.force)
+    save_symbols(symbols, force=args.force)
 
-    if args.update_top:
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            add_symbols = int(config.get("add_symbols", 0))
-        except Exception as e:
-            logger.error(f"Failed to read add_symbols from config.json: {e}")
-            return
-        update_top_symbols(add_symbols)
+    # 🔄 If --force, also update config.json → top_symbols
+    if args.force:
+        update_config_top_symbols(symbols, force=True)
 
 
 if __name__ == "__main__":

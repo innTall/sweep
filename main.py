@@ -5,7 +5,7 @@ import pytz
 import asyncio
 from datetime import datetime, timedelta
 from utils.bingx_api_async import BingxApiAsync
-from core.telegram_bot import send_signal
+from core.telegram_bot_async import send_signal
 from modules.fractals import detect_fractals
 from modules.breakouts import check_breakouts, format_breakout_message
 from core.fractal_storage import load_storage, save_storage, update_storage, init_full_scan
@@ -109,7 +109,7 @@ async def run_fractal_detection(config, tz, logger, storage):
 
                         logger.info(f"Breakout detected: {message}")
                         if send_messages:
-                            send_signal(message)
+                            await send_signal(message)
                         else:
                             logger.info("Message sending disabled (send_messages=false)")
                     else:

@@ -20,3 +20,4 @@ archive/
 logs/*.log
 storage.json
 symbols.json
+coins.txt

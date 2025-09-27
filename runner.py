@@ -1,13 +1,12 @@
 # runner.py
 import os
-import time
 import json
 import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
 import pytz
 import main
-from core.telegram_bot import send_signal  # for Telegram alerts
+from core.telegram_bot_async import send_signal  # for Telegram alerts
 
 # --- log cleanup settings (defaults, can be overridden by config.json) ---
 LOG_PATH = "logs/runner.log"
@@ -34,7 +33,7 @@ def get_next_run_time(tz, interval_minutes, delay_seconds):
     return run_time
 
 
-def clean_log_if_needed(logger):
+async def clean_log_if_needed(logger):
     """Clear runner.log periodically unless errors detected."""
     global _last_cleanup, _error_detected
 
@@ -43,7 +42,7 @@ def clean_log_if_needed(logger):
         if _error_detected:
             logger.warning("Skipped log cleanup due to errors.")
             try:
-                send_signal("⚠️ Bot error detected – log cleanup skipped, check runner.log!")
+                await send_signal("⚠️ Bot error detected - log cleanup skipped, check runner.log!")
             except Exception as e:
                 logger.error(f"Failed to send Telegram alert: {e}")
             _error_detected = False  # reset after alert
@@ -56,22 +55,54 @@ def clean_log_if_needed(logger):
         _last_cleanup = now
 
 
-async def runner_loop(config, tz, interval_minutes, delay_seconds):
+async def runner_loop(tz, interval_minutes, delay_seconds):
     logger = setup_runner_logger()
     global _error_detected
 
     storage = main.load_storage()  # pre-load storage once
+    prev_symbols = None            # track last used symbol set
 
     while True:
+        # ⏳ Wait until next scheduled run
         next_run = get_next_run_time(tz, interval_minutes=interval_minutes, delay_seconds=delay_seconds)
         now = datetime.now(tz)
         wait_seconds = (next_run - now).total_seconds()
-
         if wait_seconds > 0:
             logger.info(f"Next run scheduled at {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')} "
                         f"(waiting {int(wait_seconds)}s)")
             await asyncio.sleep(wait_seconds)
 
+        # 🔄 Reload config.json each cycle
+        try:
+            with open("config.json", "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            # direct list from config
+            active_symbols = config.get("top_symbols", [])
+            if not isinstance(active_symbols, list):
+                logger.error("top_symbols in config.json is not a list. Skipping run.")
+                await asyncio.sleep(5)
+                continue
+
+            # 🅰️ Display symbols sorted alphabetically without USDT
+            display_symbols = sorted([s.replace("USDT", "") for s in active_symbols])
+
+            # 📢 Send Telegram alert if symbols changed
+            if prev_symbols is None or set(prev_symbols) != set(active_symbols):
+                logger.info(f"Active top_symbols updated: {display_symbols[:10]}... "
+                            f"({len(active_symbols)} total)")
+                try:
+                    await send_signal(f"🔄 Active symbols updated:\n{', '.join(display_symbols)}")
+                except Exception as e:
+                    logger.error(f"Failed to send Telegram alert: {e}")
+                prev_symbols = active_symbols
+
+        except Exception as e:
+            logger.error(f"Failed to reload config.json: {e}")
+            await asyncio.sleep(5)
+            continue
+
+        # ▶️ Run bot cycle
         logger.info(f"Running main.main() at {datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S %Z')}")
         try:
             storage = await main.main(config, tz, logger, storage)
@@ -79,11 +110,12 @@ async def runner_loop(config, tz, interval_minutes, delay_seconds):
             logger.exception(f"[runner] Error while running main: {e}")
             _error_detected = True
             try:
-                send_signal(f"❌ Bot crashed with error: {e}")
+                await send_signal(f"❌ Bot crashed with error: {e}")
             except Exception as te:
                 logger.error(f"Failed to send Telegram alert: {te}")
 
-        clean_log_if_needed(logger)
+        # 🧹 Periodic log cleanup
+        await clean_log_if_needed(logger)
 
 
 def setup_runner_logger():
@@ -119,6 +151,5 @@ if __name__ == "__main__":
     print(f"[runner] Starting runner loop ({interval_minutes}m interval, +{delay_seconds}s delay), "
           f"timezone={tz}, cleanup_interval={CLEAN_INTERVAL}")
 
-    asyncio.run(runner_loop(config, tz, interval_minutes, delay_seconds))
-
+    asyncio.run(runner_loop(tz, interval_minutes, delay_seconds))
 # python runner.py
