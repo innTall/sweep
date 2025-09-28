@@ -65,8 +65,7 @@ async def runner_loop(tz, interval_minutes, delay_seconds):
     with open("config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    # create ONE long-lived API session for the whole loop
-    async with BingxApiAsync() as bingx_api:
+    async with BingxApiAsync(timeout=config.get("timeouts", {}).get("http", 15)) as bingx_api:
         # build and initialize storage manager using live get_candles method
         storage_mgr = StorageManager(config, config["interval_map"], bingx_api.get_candles, tz)
 
@@ -77,8 +76,31 @@ async def runner_loop(tz, interval_minutes, delay_seconds):
             downtime = int((datetime.now(tz) - last_dt).total_seconds() / 60)
         else:
             downtime = None  # forces full scan
-        # run startup logic (this uses the same bingx_api.get_candles)
-        await storage_mgr.startup(config["top_symbols"], downtime)
+
+        # determine if config.json was updated since last full scan (force full scan)
+        try:
+            config_mtime = datetime.fromtimestamp(os.path.getmtime("config.json"), tz=tz)
+        except Exception:
+            config_mtime = None
+
+        last_full_iso = storage_mgr.storage.get("metadata", {}).get("last_full_scan")
+        if last_full_iso:
+            last_full_dt = datetime.fromisoformat(last_full_iso.replace("Z", "+00:00")).astimezone(tz)
+        else:
+            last_full_dt = None
+
+        force_full = False
+        if last_full_dt is None:
+            force_full = True
+        elif config_mtime and config_mtime > last_full_dt:
+            force_full = True
+        elif downtime is None or downtime > int(config.get("history_limit", 0)):
+            force_full = True
+
+        # use config full_scan_limit if present (fallback to history_limit)
+        scan_limit = int(config.get("full_scan_limit", config.get("history_limit", 0)))
+
+        await storage_mgr.startup(config["top_symbols"], downtime, force_full=force_full, scan_limit=scan_limit)
 
         prev_symbols = None
 

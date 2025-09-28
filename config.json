@@ -11,7 +11,7 @@
     "4h"
   ],
   "fractal_window": 5,
-  "history_limit": 50,
+  "history_limit": 100,
   "test_mode": true,
   "send_messages": true,
   "logging": {
@@ -21,6 +21,7 @@
   "runner_interval_minutes": 15,
   "runner_delay_seconds": 60,
   "runner_log_cleanup_minutes": 60,
+  "full_scan_limit": 1000,
   "timeouts": {
     "telegram": 10,
     "http": 15

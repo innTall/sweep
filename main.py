@@ -42,6 +42,8 @@ async def run_fractal_detection(config, tz, logger, storage_mgr, bingx_api):
             # detect fractals
             H_fractals, L_fractals = detect_fractals(candles_before_last, fractal_window)
             breakout = check_breakouts(symbol, base_interval, H_fractals, L_fractals, last_candle, tz, interval_map)
+            logger.info(f"{symbol}-{base_interval} {history_limit}: H={len(H_fractals)} L={len(L_fractals)}")
+
 
             if breakout:
                 from core.fractal_storage import handle_htf_match

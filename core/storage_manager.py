@@ -20,28 +20,36 @@ class StorageManager:
         self.get_candles_fn = get_candles_fn
         self.storage = load_storage()
     
-    # ---- decision on startup ----
-    async def startup(self, symbols, downtime: int | None):
+    async def startup(self, symbols, downtime: int | None, force_full: bool = False, scan_limit: int | None = None):
         """
-        Decide how to rebuild storage based on downtime.
+        Decide how to rebuild storage based on downtime or forced full scan.
+        - If force_full True → run full scan with scan_limit (or history_limit fallback)
+        - Else if downtime is None or downtime > history_limit → full scan
+        - Else if downtime > base_interval -> recover
+        - Else skip (live updates only)
         """
-        if downtime is None or downtime > self.history_limit:
-            logger.info("⏳ Running full scan...")
+        scan_limit = int(scan_limit) if scan_limit is not None else int(self.history_limit)
+
+        if force_full or downtime is None or downtime > int(self.history_limit):
+            logger.info("⏳ Running full scan (limit=%s)...", scan_limit)
             self.storage = await init_full_scan(
                 symbols,
                 self.base_interval,
                 self.higher_intervals,
                 self.fractal_window,
-                self.history_limit,
+                scan_limit,                # pass scan_limit here
                 self.interval_map,
                 self.tz,
                 self.get_candles_fn,
             )
-        elif downtime > self.base_interval:
+            # save after full scan
+            save_storage(self.storage)
+        elif downtime > int(self.base_interval.rstrip("m")):  # if base_interval like "15m"
             logger.info("🔄 Running recovery scan...")
             await self.recover_from_timestamp(symbols, downtime)
         else:
             logger.info("✅ Downtime < base_interval → skip recovery, use existing storage.")
+
     
     # ---- recovery scan ----
     async def recover_from_timestamp(self, symbols, downtime: int):

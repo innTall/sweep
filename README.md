@@ -18,7 +18,7 @@ python utils/get_symbols_async.py --force --limit 50 --update-top
 
 This version is properly formatted with headings, code blocks, and clear step-by-step instructions.
 
-
+BingX klines limit - default: 500 maximum: 1440
 
 start - venv\Scripts\activate.bat
 

@@ -100,6 +100,11 @@ async def init_full_scan(
         "last_update_time": now,
         "last_candle_close_time": None,
     }
+
+    total_H = sum(len(storage[sym][iv]["H"]) for sym in symbols for iv in all_intervals if iv in storage[sym])
+    total_L = sum(len(storage[sym][iv]["L"]) for sym in symbols for iv in all_intervals if iv in storage[sym])
+    logger.info(f"Full scan completed: total H={total_H} total L={total_L}")
+    
     return storage
 
 
