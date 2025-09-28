@@ -1,21 +1,27 @@
 # utils/bingx_api_async.py
+import json
 import logging
 from typing import Any, Optional
 import aiohttp
-import asyncio
 
 APIURL = "https://open-api.bingx.com/openApi/swap/v3/quote/klines"
 logger = logging.getLogger("sweep")
 
+# Load config.json for timeout
+try:
+    CONFIG = json.load(open("config.json", encoding="utf-8"))
+except Exception:
+    CONFIG = {}
+
+HTTP_TIMEOUT = CONFIG.get("timeouts", {}).get("http", 15)
 
 def _normalize_symbol(symbol: str) -> str:
     return symbol.replace("USDT", "-USDT")
 
-
 class BingxApiAsync:
     """Asynchronous client for BingX USDT-M Futures API."""
 
-    def __init__(self, timeout: int = 10):
+    def __init__(self, timeout: int = HTTP_TIMEOUT):
         self._session: Optional[aiohttp.ClientSession] = None
         self._timeout = aiohttp.ClientTimeout(total=timeout)
 
@@ -31,7 +37,7 @@ class BingxApiAsync:
         if not self._session:
             raise RuntimeError("Session not initialized. Use 'async with BingxApiAsync()'.")
 
-        async with self._session.get(url, params=params) as resp:
+        async with self._session.get(url, params=params, timeout=self._timeout) as resp:
             resp.raise_for_status()
             return await resp.json()
 

@@ -6,7 +6,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import pytz
 import main
+from utils.bingx_api_async import BingxApiAsync  # async API client
 from core.telegram_bot_async import send_signal  # for Telegram alerts
+from core.storage_manager import StorageManager  # <- new manager
 
 # --- log cleanup settings (defaults, can be overridden by config.json) ---
 LOG_PATH = "logs/runner.log"
@@ -59,63 +61,76 @@ async def runner_loop(tz, interval_minutes, delay_seconds):
     logger = setup_runner_logger()
     global _error_detected
 
-    storage = main.load_storage()  # pre-load storage once
-    prev_symbols = None            # track last used symbol set
+    # --- Load config once for initial setup ---
+    with open("config.json", "r", encoding="utf-8") as f:
+        config = json.load(f)
 
-    while True:
-        # ⏳ Wait until next scheduled run
-        next_run = get_next_run_time(tz, interval_minutes=interval_minutes, delay_seconds=delay_seconds)
-        now = datetime.now(tz)
-        wait_seconds = (next_run - now).total_seconds()
-        if wait_seconds > 0:
-            logger.info(f"Next run scheduled at {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')} "
-                        f"(waiting {int(wait_seconds)}s)")
-            await asyncio.sleep(wait_seconds)
+    # create ONE long-lived API session for the whole loop
+    async with BingxApiAsync() as bingx_api:
+        # build and initialize storage manager using live get_candles method
+        storage_mgr = StorageManager(config, config["interval_map"], bingx_api.get_candles, tz)
 
-        # 🔄 Reload config.json each cycle
-        try:
-            with open("config.json", "r", encoding="utf-8") as f:
-                config = json.load(f)
+        # determine downtime (minutes since last saved candle), None -> force full scan
+        last_candle_ts = storage_mgr.storage.get("metadata", {}).get("last_candle_close_time")
+        if last_candle_ts:
+            last_dt = datetime.fromtimestamp(int(last_candle_ts)/1000, tz=tz)
+            downtime = int((datetime.now(tz) - last_dt).total_seconds() / 60)
+        else:
+            downtime = None  # forces full scan
+        # run startup logic (this uses the same bingx_api.get_candles)
+        await storage_mgr.startup(config["top_symbols"], downtime)
 
-            # direct list from config
-            active_symbols = config.get("top_symbols", [])
-            if not isinstance(active_symbols, list):
-                logger.error("top_symbols in config.json is not a list. Skipping run.")
+        prev_symbols = None
+
+        # main scheduled loop; note bingx_api stays open across cycles
+        while True:
+            # Wait until next scheduled run
+            next_run = get_next_run_time(tz, interval_minutes=interval_minutes, delay_seconds=delay_seconds)
+            now = datetime.now(tz)
+            wait_seconds = (next_run - now).total_seconds()
+            if wait_seconds > 0:
+                logger.info(f"Next run scheduled at {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')} "
+                            f"(waiting {int(wait_seconds)}s)")
+                await asyncio.sleep(wait_seconds)
+
+            # reload config each cycle (so top_symbols changes take effect)
+            try:
+                with open("config.json", "r", encoding="utf-8") as f:
+                    config = json.load(f)
+
+                active_symbols = config.get("top_symbols", [])
+
+                display_symbols = sorted([s.replace("USDT", "") for s in active_symbols])
+
+                if prev_symbols is None or set(prev_symbols) != set(active_symbols):
+                    logger.info(f"Active top_symbols updated: {display_symbols[:10]}... "
+                            f"({len(active_symbols)} total)")
+                    try:
+                        await send_signal(f"🔄 Active symbols updated:\n{', '.join(display_symbols)}")
+                    except Exception as e:
+                        logger.error(f"Failed to send Telegram alert: {e}")
+                    prev_symbols = active_symbols
+
+            except Exception as e:
+                logger.error(f"Failed to reload config.json: {e}")
                 await asyncio.sleep(5)
                 continue
 
-            # 🅰️ Display symbols sorted alphabetically without USDT
-            display_symbols = sorted([s.replace("USDT", "") for s in active_symbols])
-
-            # 📢 Send Telegram alert if symbols changed
-            if prev_symbols is None or set(prev_symbols) != set(active_symbols):
-                logger.info(f"Active top_symbols updated: {display_symbols[:10]}... "
-                            f"({len(active_symbols)} total)")
-                try:
-                    await send_signal(f"🔄 Active symbols updated:\n{', '.join(display_symbols)}")
-                except Exception as e:
-                    logger.error(f"Failed to send Telegram alert: {e}")
-                prev_symbols = active_symbols
-
-        except Exception as e:
-            logger.error(f"Failed to reload config.json: {e}")
-            await asyncio.sleep(5)
-            continue
-
-        # ▶️ Run bot cycle
-        logger.info(f"Running main.main() at {datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        try:
-            storage = await main.main(config, tz, logger, storage)
-        except Exception as e:
-            logger.exception(f"[runner] Error while running main: {e}")
-            _error_detected = True
+            # ▶️ Run bot cycle
+            logger.info(f"Running main.main() at {datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S %Z')}")
             try:
-                await send_signal(f"❌ Bot crashed with error: {e}")
-            except Exception as te:
-                logger.error(f"Failed to send Telegram alert: {te}")
+                # pass storage_mgr instead of raw dict
+                await main.main(config, tz, logger, storage_mgr, bingx_api)
+            except Exception as e:
+                logger.exception(f"[runner] Error while running main: {e}")
+                _error_detected = True
+                try:
+                    await send_signal(f"❌ Bot crashed with error: {e}")
+                except Exception as te:
+                    logger.error(f"Failed to send Telegram alert: {te}")
 
-        # 🧹 Periodic log cleanup
-        await clean_log_if_needed(logger)
+            # 🧹 Periodic log cleanup
+            await clean_log_if_needed(logger)
 
 
 def setup_runner_logger():
@@ -152,4 +167,5 @@ if __name__ == "__main__":
           f"timezone={tz}, cleanup_interval={CLEAN_INTERVAL}")
 
     asyncio.run(runner_loop(tz, interval_minutes, delay_seconds))
+
 # python runner.py

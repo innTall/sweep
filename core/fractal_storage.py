@@ -89,9 +89,8 @@ async def init_full_scan(
                     "L": L_fractals,
                 }
 
-                logger.info(
-                    f"{symbol}-{interval} full scan: H={len(H_fractals)} L={len(L_fractals)}"
-                )
+                logger.info(f"{symbol}-{interval} full scan: H={len(H_fractals)} L={len(L_fractals)}")
+                
             except Exception as e:
                 logger.error(f"Full scan failed for {symbol}-{interval}: {e}")
 
@@ -110,6 +109,7 @@ async def update_storage(
     interval: str,
     candles: list,
     fractal_window: int,
+    history_limit: int | None = None,   # pass history_limit when calling
 ) -> dict:
     """
     Update storage incrementally:
@@ -152,6 +152,14 @@ async def update_storage(
     # Sort newest first
     storage[symbol][interval]["H"].sort(key=lambda x: (x["time"], x["high"]), reverse=True)
     storage[symbol][interval]["L"].sort(key=lambda x: (x["time"], -x["low"]), reverse=True)
+
+    if history_limit is not None:
+        H_beyond = [f for f in storage[symbol][interval]["H"] if f["time"] >= candles[-history_limit]["close_time"]]
+        L_beyond = [f for f in storage[symbol][interval]["L"] if f["time"] >= candles[-history_limit]["close_time"]]
+
+        logger.info(
+            f"{symbol}-{interval} {history_limit}: H={len(H_beyond)} L={len(L_beyond)}"
+        )
 
     return storage
 

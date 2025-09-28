@@ -3,39 +3,7 @@
   "top_symbols": [
     "BTCUSDT",
     "ETHUSDT",
-    "SOLUSDT",
-    "1000PEPEUSDT",
-    "AAVEUSDT",
-    "APTUSDT",
-    "ARBUSDT",
-    "AVAXUSDT",
-    "BCHUSDT",
-    "BNBUSDT",
-    "DOGEUSDT",
-    "DOTUSDT",
-    "DYDXUSDT",
-    "ENAUSDT",
-    "ETCUSDT",
-    "FARTCOINUSDT",
-    "HYPEUSDT",
-    "INJUSDT",
-    "JTOUSDT",
-    "JUPUSDT",
-    "LDOUSDT",
-    "LINKUSDT",
-    "LTCUSDT",
-    "NEARUSDT",
-    "ONDOUSDT",
-    "POPCATUSDT",
-    "SEIUSDT",
-    "SUIUSDT",
-    "TWTUSDT",
-    "UNIUSDT",
-    "WIFUSDT",
-    "WLDUSDT",
-    "WUSDT",
-    "XLMUSDT",
-    "XRPUSDT"
+    "SOLUSDT"
   ],
   "base_interval": "15m",
   "higher_intervals": [
@@ -43,7 +11,7 @@
     "4h"
   ],
   "fractal_window": 5,
-  "history_limit": 10,
+  "history_limit": 50,
   "test_mode": true,
   "send_messages": true,
   "logging": {
@@ -53,6 +21,10 @@
   "runner_interval_minutes": 15,
   "runner_delay_seconds": 60,
   "runner_log_cleanup_minutes": 60,
+  "timeouts": {
+    "telegram": 10,
+    "http": 15
+  },
   "force_rescan_on_start": true,
   "interval_map": {
     "1m": 60,

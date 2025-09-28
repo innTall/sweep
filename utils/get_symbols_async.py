@@ -1,3 +1,4 @@
+# utils/get_symbols_async.py
 import argparse
 import json
 import logging
@@ -18,12 +19,19 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+# Load config for timeout
+try:
+    CONFIG = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+except Exception:
+    CONFIG = {}
+
+HTTP_TIMEOUT = CONFIG.get("timeouts", {}).get("http", 15)
 
 async def get_all_usdtm_symbols() -> list[str]:
     """Fetch all active BingX USDT-M perpetual futures symbols (normalized)."""
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.get(CONTRACTS_URL) as resp:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT)) as session:
+            async with session.get(CONTRACTS_URL, timeout=HTTP_TIMEOUT) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
     except Exception as e:
