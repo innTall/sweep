@@ -3,8 +3,8 @@ import json
 import os
 import logging
 from datetime import datetime, timezone
-from typing import Callable, Awaitable
 from modules.fractals import detect_fractals
+from modules.candles import CandleFetcher
 
 logger = logging.getLogger("sweep")
 
@@ -31,7 +31,7 @@ def save_storage(storage: dict, path: str = "storage.json", last_candle: dict | 
     """Save fractal storage to file with tz-aware ISO8601 timestamps."""
     try:
         storage.setdefault("metadata", {})
-        now = datetime.now(timezone.utc).isoformat()  # ✅ tz-aware
+        now = datetime.now(timezone.utc).isoformat()
         storage["metadata"]["last_update_time"] = now
 
         if last_candle is not None:
@@ -58,18 +58,16 @@ def normalize_candles(candles: list[dict]) -> list[dict]:
 
 
 async def init_full_scan(
-    symbols,
-    base_interval,
-    higher_intervals,
-    fractal_window,
-    history_limit,
-    interval_map,
-    tz,
-    get_candles_fn: Callable[[str, str, int, dict], Awaitable[list[dict]]],
+    symbols: list[str],
+    base_interval: str,
+    higher_intervals: list[str],
+    fractal_window: int,
+    history_limit: int,
+    candle_fetcher: CandleFetcher,
 ) -> dict:
     """
     Run full market scan asynchronously, detect all active fractals, return storage dict.
-    get_candles_fn must be async: (symbol, interval, limit, interval_map) -> list[dict]
+    Uses CandleFetcher.full_scan() to fetch candles.
     """
     storage = {}
     all_intervals = [base_interval] + list(higher_intervals)
@@ -79,32 +77,38 @@ async def init_full_scan(
         for interval in all_intervals:
             try:
                 candles = normalize_candles(
-                    await get_candles_fn(symbol, interval, history_limit, interval_map)
+                    await candle_fetcher.full_scan(symbol, interval, history_limit)
                 )
-                candles.sort(key=lambda c: int(c["close_time"]))
+                candles.sort(key=lambda c: int(c["close_time"]))  # ensure oldest->newest
                 H_fractals, L_fractals = detect_fractals(candles, fractal_window)
 
-                storage[symbol][interval] = {
-                    "H": H_fractals,
-                    "L": L_fractals,
-                }
-
+                storage[symbol][interval] = {"H": H_fractals, "L": L_fractals}
                 logger.info(f"{symbol}-{interval} full scan: H={len(H_fractals)} L={len(L_fractals)}")
-                
+
             except Exception as e:
                 logger.error(f"Full scan failed for {symbol}-{interval}: {e}")
 
-    now = datetime.now(timezone.utc).isoformat()  # ✅ tz-aware
+    now = datetime.now(timezone.utc).isoformat()
     storage["metadata"] = {
         "last_full_scan": now,
         "last_update_time": now,
         "last_candle_close_time": None,
     }
 
-    total_H = sum(len(storage[sym][iv]["H"]) for sym in symbols for iv in all_intervals if iv in storage[sym])
-    total_L = sum(len(storage[sym][iv]["L"]) for sym in symbols for iv in all_intervals if iv in storage[sym])
+    # aggregate totals for a quick log check
+    total_H = sum(
+        len(storage[sym][iv]["H"])
+        for sym in symbols
+        for iv in all_intervals
+        if iv in storage[sym]
+    )
+    total_L = sum(
+        len(storage[sym][iv]["L"])
+        for sym in symbols
+        for iv in all_intervals
+        if iv in storage[sym]
+    )
     logger.info(f"Full scan completed: total H={total_H} total L={total_L}")
-    
     return storage
 
 
@@ -114,7 +118,7 @@ async def update_storage(
     interval: str,
     candles: list,
     fractal_window: int,
-    history_limit: int | None = None,   # pass history_limit when calling
+    history_limit: int | None = None,
 ) -> dict:
     """
     Update storage incrementally:
@@ -158,13 +162,12 @@ async def update_storage(
     storage[symbol][interval]["H"].sort(key=lambda x: (x["time"], x["high"]), reverse=True)
     storage[symbol][interval]["L"].sort(key=lambda x: (x["time"], -x["low"]), reverse=True)
 
-    if history_limit is not None:
-        H_beyond = [f for f in storage[symbol][interval]["H"] if f["time"] >= candles[-history_limit]["close_time"]]
-        L_beyond = [f for f in storage[symbol][interval]["L"] if f["time"] >= candles[-history_limit]["close_time"]]
-
-        logger.info(
-            f"{symbol}-{interval} {history_limit}: H={len(H_beyond)} L={len(L_beyond)}"
-        )
+    if history_limit is not None and candles:
+        last_index = max(0, len(candles) - history_limit)
+        cutoff = candles[last_index]["close_time"]
+        H_beyond = [f for f in storage[symbol][interval]["H"] if f["time"] >= cutoff]
+        L_beyond = [f for f in storage[symbol][interval]["L"] if f["time"] >= cutoff]
+        logger.info(f"{symbol}-{interval} {history_limit}: H={len(H_beyond)} L={len(L_beyond)}")
 
     return storage
 

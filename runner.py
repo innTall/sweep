@@ -6,39 +6,31 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import pytz
 import main
-from utils.bingx_api_async import BingxApiAsync  # async API client
-from core.telegram_bot_async import send_signal  # for Telegram alerts
-from core.storage_manager import StorageManager  # <- new manager
+from modules.candles import CandleFetcher
+from utils.bingx_api_async import BingxApiAsync
+from core.telegram_bot_async import send_signal
+from core.storage_manager import StorageManager
 
-# --- log cleanup settings (defaults, can be overridden by config.json) ---
+# --- log cleanup defaults ---
 LOG_PATH = "logs/runner.log"
-CLEAN_INTERVAL = timedelta(hours=1)   # default
+CLEAN_INTERVAL = timedelta(hours=1)
 _last_cleanup = datetime.now(timezone.utc)
 _error_detected = False
 
 
 def get_next_run_time(tz, interval_minutes, delay_seconds):
-    """
-    Calculate the next run time aligned to the interval + delay.
-    Example: if interval=5m, and now is 10:02, next run is 10:06 (close at 10:05 + 60s).
-    """
+    """Calculate next run time aligned to interval + delay."""
     now = datetime.now(tz)
-    # Round down to nearest interval
     minutes = (now.minute // interval_minutes) * interval_minutes
     base = now.replace(second=0, microsecond=0, minute=minutes)
-
-    # Next close = base + interval
     next_close = base + timedelta(minutes=interval_minutes)
-
-    # Add delay
     run_time = next_close + timedelta(seconds=delay_seconds)
     return run_time
 
 
 async def clean_log_if_needed(logger):
-    """Clear runner.log periodically unless errors detected."""
+    """Periodically clean runner.log unless errors detected."""
     global _last_cleanup, _error_detected
-
     now = datetime.now(timezone.utc)
     if now - _last_cleanup >= CLEAN_INTERVAL:
         if _error_detected:
@@ -47,7 +39,7 @@ async def clean_log_if_needed(logger):
                 await send_signal("⚠️ Bot error detected - log cleanup skipped, check runner.log!")
             except Exception as e:
                 logger.error(f"Failed to send Telegram alert: {e}")
-            _error_detected = False  # reset after alert
+            _error_detected = False
         else:
             try:
                 open(LOG_PATH, "w").close()
@@ -61,72 +53,64 @@ async def runner_loop(tz, interval_minutes, delay_seconds):
     logger = setup_runner_logger()
     global _error_detected
 
-    # --- Load config once for initial setup ---
+    # Load config
     with open("config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 
     async with BingxApiAsync(timeout=config.get("timeouts", {}).get("http", 15)) as bingx_api:
-        # build and initialize storage manager using live get_candles method
-        storage_mgr = StorageManager(config, config["interval_map"], bingx_api.get_candles, tz)
+        # Initialize CandleFetcher (only config + interval_map)
+        candle_fetcher = CandleFetcher(config, config["interval_map"])
+        # StorageManager handles scans and live updates
+        storage_mgr = StorageManager(config, config["interval_map"], tz)
 
-        # determine downtime (minutes since last saved candle), None -> force full scan
+        # Compute downtime since last candle
         last_candle_ts = storage_mgr.storage.get("metadata", {}).get("last_candle_close_time")
         if last_candle_ts:
             last_dt = datetime.fromtimestamp(int(last_candle_ts)/1000, tz=tz)
             downtime = int((datetime.now(tz) - last_dt).total_seconds() / 60)
         else:
-            downtime = None  # forces full scan
+            downtime = None  # force full scan
 
-        # determine if config.json was updated since last full scan (force full scan)
+        # Check if config.json updated
         try:
             config_mtime = datetime.fromtimestamp(os.path.getmtime("config.json"), tz=tz)
         except Exception:
             config_mtime = None
 
         last_full_iso = storage_mgr.storage.get("metadata", {}).get("last_full_scan")
-        if last_full_iso:
-            last_full_dt = datetime.fromisoformat(last_full_iso.replace("Z", "+00:00")).astimezone(tz)
-        else:
-            last_full_dt = None
+        last_full_dt = (datetime.fromisoformat(last_full_iso.replace("Z", "+00:00")).astimezone(tz)
+                        if last_full_iso else None)
 
-        force_full = False
-        if last_full_dt is None:
-            force_full = True
-        elif config_mtime and config_mtime > last_full_dt:
-            force_full = True
-        elif downtime is None or downtime > int(config.get("history_limit", 0)):
-            force_full = True
+        force_full = last_full_dt is None or (config_mtime and config_mtime > last_full_dt) \
+                     or downtime is None or downtime > int(config.get("history_limit", 0))
 
-        # use config full_scan_limit if present (fallback to history_limit)
         scan_limit = int(config.get("full_scan_limit", config.get("history_limit", 0)))
 
+        # Initial storage startup
         await storage_mgr.startup(config["top_symbols"], downtime, force_full=force_full, scan_limit=scan_limit)
 
         prev_symbols = None
 
-        # main scheduled loop; note bingx_api stays open across cycles
+        # Main scheduled loop
         while True:
-            # Wait until next scheduled run
-            next_run = get_next_run_time(tz, interval_minutes=interval_minutes, delay_seconds=delay_seconds)
+            next_run = get_next_run_time(tz, interval_minutes, delay_seconds)
             now = datetime.now(tz)
             wait_seconds = (next_run - now).total_seconds()
             if wait_seconds > 0:
-                logger.info(f"Next run scheduled at {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')} "
+                logger.info(f"Next run at {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')} "
                             f"(waiting {int(wait_seconds)}s)")
                 await asyncio.sleep(wait_seconds)
 
-            # reload config each cycle (so top_symbols changes take effect)
+            # Reload config for dynamic top_symbols
             try:
                 with open("config.json", "r", encoding="utf-8") as f:
                     config = json.load(f)
-
                 active_symbols = config.get("top_symbols", [])
-
                 display_symbols = sorted([s.replace("USDT", "") for s in active_symbols])
 
                 if prev_symbols is None or set(prev_symbols) != set(active_symbols):
                     logger.info(f"Active top_symbols updated: {display_symbols[:10]}... "
-                            f"({len(active_symbols)} total)")
+                                f"({len(active_symbols)} total)")
                     try:
                         await send_signal(f"🔄 Active symbols updated:\n{', '.join(display_symbols)}")
                     except Exception as e:
@@ -138,20 +122,19 @@ async def runner_loop(tz, interval_minutes, delay_seconds):
                 await asyncio.sleep(5)
                 continue
 
-            # ▶️ Run bot cycle
+            # Run main bot cycle
             logger.info(f"Running main.main() at {datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S %Z')}")
             try:
-                # pass storage_mgr instead of raw dict
                 await main.main(config, tz, logger, storage_mgr, bingx_api)
             except Exception as e:
-                logger.exception(f"[runner] Error while running main: {e}")
+                logger.exception(f"[runner] Error in main: {e}")
                 _error_detected = True
                 try:
                     await send_signal(f"❌ Bot crashed with error: {e}")
                 except Exception as te:
                     logger.error(f"Failed to send Telegram alert: {te}")
 
-            # 🧹 Periodic log cleanup
+            # Periodic log cleanup
             await clean_log_if_needed(logger)
 
 
@@ -166,7 +149,6 @@ def setup_runner_logger():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # Also print to console
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
