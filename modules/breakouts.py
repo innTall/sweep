@@ -111,6 +111,16 @@ def format_breakout_message(
         msg_lines.append(f"BreakCandle Low={breakout['candle_low']}")
 
     # --- Active fractals summary ---
+    if storage is not None and higher_intervals:
+        parts = []
+        for htf in higher_intervals:
+            if htf in storage.get(breakout["symbol"], {}):
+                h_count = len(storage[breakout["symbol"]][htf].get("H", []))
+                l_count = len(storage[breakout["symbol"]][htf].get("L", []))
+                parts.append(f"{h_count}-{l_count}/{htf}")
+        if parts:
+            msg_lines.append("Active HF-LF: " + " * ".join(parts))
+    '''
     if storage is not None:
         parts = []
 
@@ -128,5 +138,5 @@ def format_breakout_message(
 
         if parts:
             msg_lines.append("Active HF-LF: " + " * ".join(parts))
-
+    '''
     return "\n".join(msg_lines)

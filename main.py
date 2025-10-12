@@ -51,18 +51,26 @@ async def run_fractal_detection(config, tz, logger, storage_mgr, bingx_api):
                     storage_mgr.storage, symbol, breakout, config["higher_intervals"]
                 )
 
+                # --- Only send if breakout matches any HTF fractal ---
+                has_htf_match = len(matched_htfs) > 0
+
                 message = format_breakout_message(
                     breakout, tz,
                     H_fractals=H_fractals, L_fractals=L_fractals,
                     storage=storage_mgr.storage,
-                    higher_intervals=config["higher_intervals"],                    matched_htfs=matched_htfs,
+                    higher_intervals=config["higher_intervals"],
+                    matched_htfs=matched_htfs,
                 )
-                logger.info(f"Breakout detected: {message}")
-                if send_messages:
-                    await send_signal(message)
 
-            # let StorageManager do the updating
-            await storage_mgr.update_live([symbol])
+                if has_htf_match:
+                    logger.info(f"✅ HTF breakout detected: {message}")
+                    if send_messages:
+                        await send_signal(message)
+                else:
+                    logger.info(f"⚙️ 15m breakout ignored (no HTF match).")
+
+                # continue updating live data
+                await storage_mgr.update_live([symbol])
 
         except Exception as e:
             logger.error(f"Detection failed for {symbol}: {e}")
