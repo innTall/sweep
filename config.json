@@ -8,6 +8,7 @@
     "AAVEUSDT",
     "APTUSDT",
     "ARBUSDT",
+    "ASTERUSDT",
     "AVAXUSDT",
     "BCHUSDT",
     "BNBUSDT",
@@ -22,6 +23,7 @@
     "ETHFIUSDT",
     "FARTCOINUSDT",
     "FILUSDT",
+    "GRASSUSDT",
     "HBARUSDT",
     "HYPEUSDT",
     "INJUSDT",
@@ -46,7 +48,7 @@
     "WUSDT",
     "XLMUSDT",
     "XRPUSDT",
-    "ZKUSDT"
+    "ZROUSDT"
   ],
   "base_interval": "15m",
   "higher_intervals": [

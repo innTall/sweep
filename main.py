@@ -1,11 +1,8 @@
 # main.py
 import logging
-#from datetime import datetime, timedelta
-#from utils.bingx_api_async import BingxApiAsync
 from core.telegram_bot_async import send_signal
 from modules.fractals import detect_fractals
 from modules.breakouts import check_breakouts, format_breakout_message
-#from core.fractal_storage import load_storage, save_storage, init_full_scan
 
 def setup_logger(config: dict):
     level_str = config.get("logging", {}).get("level", "INFO").upper()
@@ -39,11 +36,10 @@ async def run_fractal_detection(config, tz, logger, storage_mgr, bingx_api):
             candles.sort(key=lambda c: int(c["close_time"]))
             candles_before_last = [c for c in candles if int(c["close_time"]) < int(last_candle["timestamp"])]
 
-            # detect fractals
-            H_fractals, L_fractals = detect_fractals(candles_before_last, fractal_window)
+            # ✅ Get all currently active fractals from storage (not limited history)
+            H_fractals, L_fractals = await storage_mgr.get_active_fractals(symbol, base_interval)
             breakout = check_breakouts(symbol, base_interval, H_fractals, L_fractals, last_candle, tz, interval_map)
             logger.info(f"{symbol}-{base_interval} {history_limit}: H={len(H_fractals)} L={len(L_fractals)}")
-
 
             if breakout:
                 from core.fractal_storage import handle_htf_match

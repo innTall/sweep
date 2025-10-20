@@ -172,4 +172,5 @@ if __name__ == "__main__":
 
     asyncio.run(runner_loop(tz, interval_minutes, delay_seconds))
 
+# venv\Scripts\activate.bat
 # python runner.py
